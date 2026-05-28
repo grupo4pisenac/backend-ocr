@@ -4,6 +4,14 @@ import pytesseract
 from PIL import Image
 import requests
 from io import BytesIO
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+tesseract_cmd = os.getenv("TESSERACT_CMD")
+if tesseract_cmd:
+    pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
 app = FastAPI()
 
@@ -16,8 +24,12 @@ def health():
 
 @app.post("/ocr")
 def processar_ocr(request: OcrRequest):
+
     try:
-        response = requests.get(request.url, timeout=10)
+        headers = {
+            "User-Agent": "MeuAppOcrFastAPI/1.0 (contato@meuemail.com)"
+        }
+        response = requests.get(request.url, headers=headers, timeout=10)
         response.raise_for_status()
 
         imagem = Image.open(BytesIO(response.content))
