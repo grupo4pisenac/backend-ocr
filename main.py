@@ -172,10 +172,9 @@ async def processar_upload(file: UploadFile = File(...)):
             "campos": campos,
             "solicitacao": {
                 **campos,
-                "urlArquivo": cloudinary_url,
+                "urlCertificado": cloudinary_url,
             },
-            "cloudinary_url": cloudinary_url,
-            "urlArquivo": cloudinary_url,
+            "urlCertificado": cloudinary_url,
         }
     except HTTPException:
         raise

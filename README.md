@@ -32,14 +32,13 @@ Resposta:
     "area": "EXTENSAO",
     "horasSolicitadas": 20,
     "semestre": 1,
-    "urlArquivo": "https://res.cloudinary.com/..."
+    "urlCertificado": "https://res.cloudinary.com/..."
   },
-  "urlArquivo": "https://res.cloudinary.com/...",
-  "cloudinary_url": "https://res.cloudinary.com/..."
+  "urlCertificado": "https://res.cloudinary.com/..."
 }
 ```
 
-O frontend pode usar `solicitacao` para preencher o formulario e, após a confirmacao do aluno, enviar esse payload para o backend Java. Os campos `urlArquivo` e `cloudinary_url` apontam para o mesmo arquivo; `urlArquivo` segue o nome usado no backend Java.
+O frontend pode usar `solicitacao` para preencher o formulario e, apos a confirmacao do aluno, enviar esse payload para o backend Java. Para criar a solicitacao no Java, o campo esperado e `urlCertificado`.
 
 Configure no ambiente:
 
