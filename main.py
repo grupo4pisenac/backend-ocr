@@ -130,19 +130,32 @@ async def processar_upload(file: UploadFile = File(...)):
     try:
         conteudo = await file.read()
         texto, campos = processar_imagem(conteudo)
-        cloudinary_url = enviar_cloudinary(conteudo, file.filename)
 
         return {
             "success": True,
             "texto": texto,
             "campos": campos,
-            "solicitacao": {
-                **campos,
-                "urlCertificado": cloudinary_url,
-            },
-            "urlCertificado": cloudinary_url,
+            "solicitacao": campos,
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao processar upload: {str(e)}")
+
+@app.post("/certificados/upload")
+async def upload_certificado(file: UploadFile = File(...)):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Envie um arquivo de imagem")
+
+    try:
+        conteudo = await file.read()
+        url_certificado = enviar_cloudinary(conteudo, file.filename)
+
+        return {
+            "success": True,
+            "urlCertificado": url_certificado,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao enviar certificado: {str(e)}")

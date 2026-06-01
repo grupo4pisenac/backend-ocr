@@ -6,9 +6,9 @@ A API esta disponivel em producao no Render:
 https://backend-ocr-ivkg.onrender.com
 ```
 
-## OCR com upload
+## OCR antes da confirmacao
 
-Envie o arquivo selecionado no frontend como `multipart/form-data`:
+Envie o arquivo selecionado no frontend como `multipart/form-data`. Este endpoint apenas faz OCR e nao envia o arquivo ao Cloudinary:
 
 ```
 POST /ocr/upload
@@ -31,14 +31,32 @@ Resposta:
     "descricao": "Certificado de participacao...",
     "area": null,
     "horasSolicitadas": 20,
-    "semestre": 1,
-    "urlCertificado": "https://res.cloudinary.com/..."
-  },
+    "semestre": 1
+  }
+}
+```
+
+O frontend pode usar `solicitacao` para preencher o formulario. Se o aluno cancelar, nenhum arquivo fica salvo no Cloudinary.
+
+## Upload apos confirmacao
+
+Quando o aluno confirmar a solicitacao, envie o mesmo arquivo para:
+
+```
+POST /certificados/upload
+file: imagem
+```
+
+Resposta:
+
+```json
+{
+  "success": true,
   "urlCertificado": "https://res.cloudinary.com/..."
 }
 ```
 
-O frontend pode usar `solicitacao` para preencher o formulario e, apos a confirmacao do aluno, enviar esse payload para o backend Java. Para criar a solicitacao no Java, o campo esperado e `urlCertificado`.
+Depois disso, o frontend envia ao backend Java os dados revisados pelo aluno junto com `urlCertificado`.
 
 Configure no ambiente:
 
