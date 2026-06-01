@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import pytesseract
 from PIL import Image
 import requests
@@ -9,6 +9,7 @@ import os
 import re
 import cloudinary
 import cloudinary.uploader
+from typing import Optional
 
 load_dotenv()
 
@@ -23,10 +24,69 @@ cloudinary.config(
     secure=True,
 )
 
-app = FastAPI()
+app = FastAPI(
+    title="Backend OCR - Horas Complementares",
+    description=(
+        "Servico de OCR para certificados de horas complementares. "
+        "Use `/ocr/upload` para extrair dados antes da confirmacao do aluno "
+        "e `/certificados/upload` para salvar o arquivo no Cloudinary apenas "
+        "apos a confirmacao."
+    ),
+    version="1.0.0",
+    contact={
+        "name": "Grupo 4 PI Senac",
+    },
+    openapi_tags=[
+        {
+            "name": "Health",
+            "description": "Verificacao basica do servico.",
+        },
+        {
+            "name": "OCR",
+            "description": "Extracao de texto e campos do certificado, sem upload para Cloudinary.",
+        },
+        {
+            "name": "Certificados",
+            "description": "Upload definitivo do certificado apos confirmacao do aluno.",
+        },
+    ],
+)
 
 class OcrRequest(BaseModel):
-    url: str
+    url: str = Field(
+        ...,
+        examples=["https://exemplo.com/certificado.png"],
+        description="URL publica da imagem que sera processada pelo OCR.",
+    )
+
+class CamposSolicitacao(BaseModel):
+    descricao: Optional[str] = Field(
+        None,
+        examples=["Certificado de participacao em palestra sobre tecnologia"],
+    )
+    area: Optional[str] = Field(
+        None,
+        description="Area fica nula porque as areas sao dinamicas no backend Java.",
+        examples=[None],
+    )
+    horasSolicitadas: Optional[int] = Field(None, examples=[20])
+    semestre: Optional[int] = Field(None, examples=[1])
+
+class OcrResponse(BaseModel):
+    success: bool = Field(True, examples=[True])
+    texto: str = Field(..., examples=["Certificado de participacao... carga horaria de 20 horas"])
+    campos: CamposSolicitacao
+    solicitacao: CamposSolicitacao
+
+class UploadCertificadoResponse(BaseModel):
+    success: bool = Field(True, examples=[True])
+    urlCertificado: str = Field(
+        ...,
+        examples=["https://res.cloudinary.com/seu-cloud/image/upload/v1/certificados/certificado.png"],
+    )
+
+class HealthResponse(BaseModel):
+    status: str = Field("ok", examples=["ok"])
 
 def normalizar_texto(texto: str) -> str:
     return " ".join(texto.split())
@@ -95,11 +155,17 @@ def enviar_cloudinary(conteudo: bytes, filename: str | None = None) -> str:
     )
     return resultado["secure_url"]
 
-@app.get("/")
+@app.get("/", response_model=HealthResponse, tags=["Health"])
 def health():
     return {"status": "ok"}
 
-@app.post("/ocr")
+@app.post(
+    "/ocr",
+    response_model=OcrResponse,
+    tags=["OCR"],
+    summary="Processa OCR a partir de uma URL publica",
+    description="Endpoint auxiliar que baixa uma imagem por URL e extrai texto/campos. Nao envia arquivo ao Cloudinary.",
+)
 def processar_ocr(request: OcrRequest):
 
     try:
@@ -122,8 +188,19 @@ def processar_ocr(request: OcrRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao processar OCR: {str(e)}")
 
-@app.post("/ocr/upload")
-async def processar_upload(file: UploadFile = File(...)):
+@app.post(
+    "/ocr/upload",
+    response_model=OcrResponse,
+    tags=["OCR"],
+    summary="Processa OCR do arquivo antes da confirmacao",
+    description=(
+        "Recebe o certificado selecionado pelo aluno e retorna campos para pre-preencher "
+        "o formulario. Este endpoint nao salva o arquivo no Cloudinary."
+    ),
+)
+async def processar_upload(
+    file: UploadFile = File(..., description="Imagem do certificado selecionada pelo aluno."),
+):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Envie um arquivo de imagem")
 
@@ -142,8 +219,19 @@ async def processar_upload(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao processar upload: {str(e)}")
 
-@app.post("/certificados/upload")
-async def upload_certificado(file: UploadFile = File(...)):
+@app.post(
+    "/certificados/upload",
+    response_model=UploadCertificadoResponse,
+    tags=["Certificados"],
+    summary="Envia certificado ao Cloudinary apos confirmacao",
+    description=(
+        "Deve ser chamado somente depois que o aluno confirmar a submissao. "
+        "Retorna `urlCertificado`, campo esperado pelo backend Java ao criar a solicitacao."
+    ),
+)
+async def upload_certificado(
+    file: UploadFile = File(..., description="Imagem do certificado confirmada pelo aluno."),
+):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Envie um arquivo de imagem")
 

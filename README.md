@@ -6,6 +6,20 @@ A API esta disponivel em producao no Render:
 https://backend-ocr-ivkg.onrender.com
 ```
 
+## Documentacao online
+
+Swagger UI:
+
+```
+https://backend-ocr-ivkg.onrender.com/docs
+```
+
+OpenAPI JSON:
+
+```
+https://backend-ocr-ivkg.onrender.com/openapi.json
+```
+
 ## OCR antes da confirmacao
 
 Envie o arquivo selecionado no frontend como `multipart/form-data`. Este endpoint apenas faz OCR e nao envia o arquivo ao Cloudinary:
