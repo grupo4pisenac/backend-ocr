@@ -23,13 +23,13 @@ Resposta:
   "texto": "...",
   "campos": {
     "descricao": "Certificado de participacao...",
-    "area": "EXTENSAO",
+    "area": null,
     "horasSolicitadas": 20,
     "semestre": 1
   },
   "solicitacao": {
     "descricao": "Certificado de participacao...",
-    "area": "EXTENSAO",
+    "area": null,
     "horasSolicitadas": 20,
     "semestre": 1,
     "urlCertificado": "https://res.cloudinary.com/..."

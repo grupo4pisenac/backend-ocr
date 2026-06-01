@@ -28,33 +28,6 @@ app = FastAPI()
 class OcrRequest(BaseModel):
     url: str
 
-AREAS_COMPLEMENTARES = {
-    "ENSINO": [
-        "curso",
-        "disciplina",
-        "monitoria",
-        "minicurso",
-        "oficina",
-        "treinamento",
-    ],
-    "PESQUISA": [
-        "pesquisa",
-        "iniciacao cientifica",
-        "artigo",
-        "publicacao",
-        "congresso",
-    ],
-    "EXTENSAO": [
-        "extensao",
-        "voluntariado",
-        "projeto social",
-        "comunidade",
-        "palestra",
-        "seminario",
-        "evento",
-    ],
-}
-
 def normalizar_texto(texto: str) -> str:
     return " ".join(texto.split())
 
@@ -64,13 +37,6 @@ def extrair_descricao(texto: str) -> str | None:
         if len(linha) >= 12:
             return linha[:255]
     return normalizar_texto(texto)[:255] or None
-
-def extrair_area(texto: str) -> str | None:
-    texto_normalizado = normalizar_texto(texto).lower()
-    for area, palavras_chave in AREAS_COMPLEMENTARES.items():
-        if any(palavra in texto_normalizado for palavra in palavras_chave):
-            return area
-    return None
 
 def extrair_horas(texto: str) -> int | None:
     match = re.search(
@@ -99,7 +65,7 @@ def extrair_semestre(texto: str) -> int | None:
 def extrair_campos(texto: str) -> dict:
     return {
         "descricao": extrair_descricao(texto),
-        "area": extrair_area(texto),
+        "area": None,
         "horasSolicitadas": extrair_horas(texto),
         "semestre": extrair_semestre(texto),
     }
