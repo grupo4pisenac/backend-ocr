@@ -9,7 +9,6 @@ import os
 import re
 import cloudinary
 import cloudinary.uploader
-from typing import Optional
 
 load_dotenv()
 
@@ -58,35 +57,6 @@ class OcrRequest(BaseModel):
         examples=["https://exemplo.com/certificado.png"],
         description="URL publica da imagem que sera processada pelo OCR.",
     )
-
-class CamposSolicitacao(BaseModel):
-    descricao: Optional[str] = Field(
-        None,
-        examples=["Certificado de participacao em palestra sobre tecnologia"],
-    )
-    area: Optional[str] = Field(
-        None,
-        description="Area fica nula porque as areas sao dinamicas no backend Java.",
-        examples=[None],
-    )
-    horasSolicitadas: Optional[int] = Field(None, examples=[20])
-    semestre: Optional[int] = Field(None, examples=[1])
-
-class OcrResponse(BaseModel):
-    success: bool = Field(True, examples=[True])
-    texto: str = Field(..., examples=["Certificado de participacao... carga horaria de 20 horas"])
-    campos: CamposSolicitacao
-    solicitacao: CamposSolicitacao
-
-class UploadCertificadoResponse(BaseModel):
-    success: bool = Field(True, examples=[True])
-    urlCertificado: str = Field(
-        ...,
-        examples=["https://res.cloudinary.com/seu-cloud/image/upload/v1/certificados/certificado.png"],
-    )
-
-class HealthResponse(BaseModel):
-    status: str = Field("ok", examples=["ok"])
 
 def normalizar_texto(texto: str) -> str:
     return " ".join(texto.split())
@@ -155,13 +125,12 @@ def enviar_cloudinary(conteudo: bytes, filename: str | None = None) -> str:
     )
     return resultado["secure_url"]
 
-@app.get("/", response_model=HealthResponse, tags=["Health"])
+@app.get("/", tags=["Health"])
 def health():
     return {"status": "ok"}
 
 @app.post(
     "/ocr",
-    response_model=OcrResponse,
     tags=["OCR"],
     summary="Processa OCR a partir de uma URL publica",
     description="Endpoint auxiliar que baixa uma imagem por URL e extrai texto/campos. Nao envia arquivo ao Cloudinary.",
@@ -190,7 +159,6 @@ def processar_ocr(request: OcrRequest):
 
 @app.post(
     "/ocr/upload",
-    response_model=OcrResponse,
     tags=["OCR"],
     summary="Processa OCR do arquivo antes da confirmacao",
     description=(
@@ -221,7 +189,6 @@ async def processar_upload(
 
 @app.post(
     "/certificados/upload",
-    response_model=UploadCertificadoResponse,
     tags=["Certificados"],
     summary="Envia certificado ao Cloudinary apos confirmacao",
     description=(
