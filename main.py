@@ -7,6 +7,7 @@ from io import BytesIO
 from dotenv import load_dotenv
 import os
 import re
+import json
 import cloudinary
 import cloudinary.uploader
 
@@ -100,10 +101,91 @@ def extrair_campos(texto: str) -> dict:
         "semestre": extrair_semestre(texto),
     }
 
+def normalizar_campos_llm(campos: dict, fallback: dict) -> dict:
+    descricao = campos.get("descricao") or fallback["descricao"]
+    area = campos.get("area")
+    horas_solicitadas = campos.get("horasSolicitadas") or fallback["horasSolicitadas"]
+    semestre = campos.get("semestre") or fallback["semestre"]
+
+    try:
+        horas_solicitadas = int(horas_solicitadas) if horas_solicitadas is not None else None
+    except (TypeError, ValueError):
+        horas_solicitadas = fallback["horasSolicitadas"]
+
+    try:
+        semestre = int(semestre) if semestre is not None else None
+    except (TypeError, ValueError):
+        semestre = fallback["semestre"]
+
+    return {
+        "descricao": descricao[:255] if isinstance(descricao, str) else fallback["descricao"],
+        "area": area if isinstance(area, str) and area.strip() else None,
+        "horasSolicitadas": horas_solicitadas,
+        "semestre": semestre,
+    }
+
+def interpretar_texto_com_llm(texto: str, fallback: dict) -> dict:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return fallback
+
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    prompt = f"""
+Voce interpreta textos extraidos por OCR de certificados de horas complementares.
+
+Retorne somente JSON valido, sem markdown e sem texto adicional, no formato:
+{{
+  "descricao": string ou null,
+  "area": string ou null,
+  "horasSolicitadas": number ou null,
+  "semestre": number ou null
+}}
+
+Regras:
+- "descricao" deve resumir o certificado em ate 255 caracteres.
+- "area" deve ficar null se o texto nao informar explicitamente uma area.
+- Nao invente area, porque as areas sao dinamicas no backend Java.
+- "horasSolicitadas" deve ser um numero inteiro quando houver carga horaria.
+- "semestre" deve ser 1 ou 2 quando for possivel inferir por data; caso contrario null.
+- Se houver duvida, use null.
+
+Texto do OCR:
+{texto}
+""".strip()
+
+    try:
+        response = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            params={"key": api_key},
+            json={
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt}
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0,
+                    "responseMimeType": "application/json",
+                },
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        data = response.json()
+        texto_resposta = data["candidates"][0]["content"]["parts"][0]["text"]
+        campos_llm = json.loads(texto_resposta)
+        return normalizar_campos_llm(campos_llm, fallback)
+    except Exception:
+        return fallback
+
 def processar_imagem(conteudo: bytes) -> tuple[str, dict]:
     imagem = Image.open(BytesIO(conteudo))
     texto = pytesseract.image_to_string(imagem, lang="por").strip()
-    return texto, extrair_campos(texto)
+    campos_fallback = extrair_campos(texto)
+    campos = interpretar_texto_com_llm(texto, campos_fallback)
+    return texto, campos
 
 def enviar_cloudinary(conteudo: bytes, filename: str | None = None) -> str:
     if not all([
