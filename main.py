@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 import pytesseract
 from PIL import Image
@@ -26,6 +27,8 @@ cloudinary.config(
 )
 
 TIPOS_PERMITIDOS = {"image/jpeg", "image/jpg", "image/png", "application/pdf"}
+MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 
 app = FastAPI(
@@ -62,6 +65,26 @@ class OcrRequest(BaseModel):
         examples=["https://exemplo.com/certificado.png"],
         description="URL publica da imagem que sera processada pelo OCR.",
     )
+
+def validar_url_publica(url: str) -> None:
+    parsed = urlparse(url)
+
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Apenas URLs http/https sao permitidas")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL invalida")
+
+    try:
+        enderecos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        raise ValueError("Nao foi possivel resolver o host da URL")
+
+    for info in enderecos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise ValueError("URL aponta para um endereco interno/nao permitido")
 
 def normalizar_texto(texto: str) -> str:
     return " ".join(texto.split())
@@ -207,12 +230,16 @@ def enviar_cloudinary(conteudo: bytes, filename: str | None = None) -> str:
             detail="Credenciais do Cloudinary nao configuradas",
         )
 
+    nome_base = os.path.splitext(filename)[0] if filename else "certificado"
+    nome_base = re.sub(r"[^a-zA-Z0-9_-]", "-", nome_base).strip("-") or "certificado"
+    public_id = f"{nome_base}-{uuid.uuid4().hex[:10]}"
+
     resultado = cloudinary.uploader.upload(
         conteudo,
         folder=os.getenv("CLOUDINARY_FOLDER", "certificados"),
         resource_type="auto",
-        public_id=os.path.splitext(filename)[0] if filename else None,
-        overwrite=False,
+        public_id=public_id,
+        overwrite=True,
     )
     return resultado["secure_url"]
 
@@ -229,13 +256,19 @@ def health():
 def processar_ocr(request: OcrRequest):
 
     try:
+        validar_url_publica(request.url)
+
         headers = {
             "User-Agent": "MeuAppOcrFastAPI/1.0 (contato@meuemail.com)"
         }
         response = requests.get(request.url, headers=headers, timeout=10)
         response.raise_for_status()
 
-        texto, campos = processar_imagem(conteudo, file.content_type)
+        content_type = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
+        if content_type not in TIPOS_PERMITIDOS:
+            content_type = "image/jpeg"
+
+        texto, campos = processar_imagem(response.content, content_type)
 
         return {
             "success": True,
@@ -243,6 +276,8 @@ def processar_ocr(request: OcrRequest):
             "campos": campos,
             "solicitacao": campos,
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"URL invalida: {str(e)}")
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=400, detail=f"Erro ao baixar imagem: {str(e)}")
     except Exception as e:
@@ -254,7 +289,7 @@ def processar_ocr(request: OcrRequest):
     summary="Processa OCR do arquivo antes da confirmacao",
     description=(
         "Recebe o certificado selecionado pelo aluno e retorna campos para pre-preencher "
-        "o formulario. Este endpoint nao salva o arquivo no Cloudinary.",
+        "o formulario. Este endpoint nao salva o arquivo no Cloudinary."
     ),
 )
 async def processar_upload(
@@ -265,7 +300,10 @@ async def processar_upload(
 
     try:
         conteudo = await file.read()
-        texto, campos = processar_imagem(conteudo, file.content_type)
+        if len(conteudo) > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(status_code=400, detail=f"Arquivo excede o limite de {MAX_UPLOAD_SIZE_MB}MB")
+
+        texto, campos = await run_in_threadpool(processar_imagem, conteudo, file.content_type)
 
         return {
             "success": True,
@@ -296,12 +334,10 @@ async def upload_certificado(
 
     try:
         conteudo = await file.read()
-        url_certificado = enviar_cloudinary(conteudo, file.filename)
+        if len(conteudo) > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(status_code=400, detail=f"Arquivo excede o limite de {MAX_UPLOAD_SIZE_MB}MB")
 
-        return {
-            "success": True,
-            "urlCertificado": url_certificado,
-        }
+        url_certificado = await run_in_threadpool(enviar_cloudinary, conteudo, file.filename)
     except HTTPException:
         raise
     except Exception as e:

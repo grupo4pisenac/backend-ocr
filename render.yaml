@@ -2,3 +2,18 @@ services:
   - type: web
     name: backend-ocr
     runtime: docker
+    envVars:
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false
+      - key: MAX_UPLOAD_SIZE_MB
+        sync: false
