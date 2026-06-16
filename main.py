@@ -10,6 +10,7 @@ import re
 import json
 import cloudinary
 import cloudinary.uploader
+from pdf2image import convert_from_bytes
 
 load_dotenv()
 
@@ -23,6 +24,9 @@ cloudinary.config(
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
     secure=True,
 )
+
+TIPOS_PERMITIDOS = {"image/jpeg", "image/jpg", "image/png", "application/pdf"}
+
 
 app = FastAPI(
     title="Backend OCR - Horas Complementares",
@@ -180,8 +184,13 @@ Texto do OCR:
     except Exception:
         return fallback
 
-def processar_imagem(conteudo: bytes) -> tuple[str, dict]:
-    imagem = Image.open(BytesIO(conteudo))
+def processar_imagem(conteudo: bytes, content_type: str = "image/jpeg") -> tuple[str, dict]:
+    if content_type == "application/pdf":
+        paginas = convert_from_bytes(conteudo)
+        imagem = paginas[0]  # processa apenas a primeira página
+    else:
+        imagem = Image.open(BytesIO(conteudo))
+    
     texto = pytesseract.image_to_string(imagem, lang="por").strip()
     campos_fallback = extrair_campos(texto)
     campos = interpretar_texto_com_llm(texto, campos_fallback)
@@ -226,7 +235,7 @@ def processar_ocr(request: OcrRequest):
         response = requests.get(request.url, headers=headers, timeout=10)
         response.raise_for_status()
 
-        texto, campos = processar_imagem(response.content)
+        texto, campos = processar_imagem(conteudo, file.content_type)
 
         return {
             "success": True,
@@ -245,18 +254,18 @@ def processar_ocr(request: OcrRequest):
     summary="Processa OCR do arquivo antes da confirmacao",
     description=(
         "Recebe o certificado selecionado pelo aluno e retorna campos para pre-preencher "
-        "o formulario. Este endpoint nao salva o arquivo no Cloudinary."
+        "o formulario. Este endpoint nao salva o arquivo no Cloudinary.",
     ),
 )
 async def processar_upload(
     file: UploadFile = File(..., description="Imagem do certificado selecionada pelo aluno."),
 ):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Envie um arquivo de imagem")
+    if not file.content_type or file.content_type not in TIPOS_PERMITIDOS:
+        raise HTTPException(status_code=400, detail="Envie um arquivo nos formatos: JPG, PNG ou PDF")
 
     try:
         conteudo = await file.read()
-        texto, campos = processar_imagem(conteudo)
+        texto, campos = processar_imagem(conteudo, file.content_type)
 
         return {
             "success": True,
@@ -280,9 +289,10 @@ async def processar_upload(
 )
 async def upload_certificado(
     file: UploadFile = File(..., description="Imagem do certificado confirmada pelo aluno."),
-):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Envie um arquivo de imagem")
+):  
+
+    if not file.content_type or file.content_type not in TIPOS_PERMITIDOS:
+        raise HTTPException(status_code=400, detail="Envie um arquivo nos formatos: JPG, PNG ou PDF")
 
     try:
         conteudo = await file.read()

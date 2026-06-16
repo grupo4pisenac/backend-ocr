@@ -10,6 +10,7 @@ fastapi==0.136.3
 h11==0.16.0
 idna==3.16
 packaging==26.2
+pdf2image==1.17.0
 pillow==12.2.0
 pydantic==2.13.4
 pydantic_core==2.46.4
@@ -17,6 +18,7 @@ pytesseract==0.3.13
 python-dotenv==1.2.2
 python-multipart==0.0.29
 requests==2.34.2
+six==1.17.0
 starlette==1.1.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
