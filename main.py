@@ -252,6 +252,10 @@ def enviar_cloudinary(conteudo: bytes, filename: str | None = None) -> str:
 def health():
     return {"status": "ok"}
 
+@app.head("/", tags=["Health"])
+def health_head():
+    return
+
 @app.post(
     "/ocr",
     tags=["OCR"],
@@ -343,6 +347,10 @@ async def upload_certificado(
             raise HTTPException(status_code=400, detail=f"Arquivo excede o limite de {MAX_UPLOAD_SIZE_MB}MB")
 
         url_certificado = await run_in_threadpool(enviar_cloudinary, conteudo, file.filename)
+        return {
+            "success": True,
+            "urlCertificado": url_certificado,
+        }
     except HTTPException:
         raise
     except Exception as e:
